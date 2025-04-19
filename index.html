@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Pomodoro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* --- Global Styles & Font --- */
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html { height: 100%; }
+        body { font-family: 'Press Start 2P', cursive; background-color: #333; background-size: cover; background-position: center; background-repeat: no-repeat; color: #FFF; display: flex; justify-content: center; align-items: center; min-height: 100vh; overflow: hidden; image-rendering: pixelated; transition: background-image 0.5s ease-in-out; position: relative; }
+
+        /* --- Weather Overlay --- */
+        #weather-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 1; }
+        .snowflake, .raindrop { position: absolute; top: -20px; pointer-events: none; user-select: none; animation: fall linear infinite; will-change: transform, opacity; }
+        .snowflake { width: 8px; height: 8px; background: white; border-radius: 50%; box-shadow: 0 0 5px white; opacity: 0.8; }
+        .raindrop { width: 1px; height: 15px; background: linear-gradient(to bottom, rgba(173, 216, 230, 0), rgba(173, 216, 230, 0.6)); opacity: 0.6; }
+        @keyframes fall { to { transform: translateY(105vh); opacity: 0; } }
+
+        /* --- Wallpaper Change Buttons --- */
+        .wallpaper-nav-btn { position: fixed; top: 50%; transform: translateY(-50%); background-color: rgba(60, 60, 60, 0.5); color: #FFF; border: 2px solid #2a2a2a; box-shadow: inset -2px -2px 0px rgba(90, 90, 90, 0.5), 2px 2px 0px #1a1a1a; width: 35px; height: 50px; font-size: 1.5em; cursor: pointer; display: flex; justify-content: center; align-items: center; z-index: 100; opacity: 0.3; transition: opacity 0.3s ease, background-color 0.3s ease; font-family: 'Press Start 2P', cursive; }
+        .wallpaper-nav-btn:hover { opacity: 0.9; background-color: rgba(60, 60, 60, 0.8); }
+        .wallpaper-nav-btn:active { box-shadow: inset 2px 2px 0px rgba(90, 90, 90, 0.5), 0 0 0 #1a1a1a; transform: translate(1px, calc(-50% + 1px)); }
+        #prev-wallpaper-btn { left: 10px; }
+        #next-wallpaper-btn { right: 10px; }
+
+        /* --- App Container --- */
+        #app-container { width: 100%; max-width: 420px; height: 100vh; max-height: 850px; /* Adjusted max height */ background-color: rgba(0, 0, 0, 0.4); /* Slightly darker base */ border: 4px solid #5a5a5a; box-shadow: inset 0 0 0 4px #2a2a2a; position: relative; overflow: hidden; display: flex; flex-direction: column; z-index: 10; transition: background-color 0.3s ease, border 0.3s ease, box-shadow 0.3s ease, max-width 0.3s ease, max-height 0.3s ease; }
+        body.minimal-timer-active #app-container { background-color: transparent !important; border-color: transparent !important; box-shadow: none !important; max-width: 100% !important; max-height: 100% !important; pointer-events: none; }
+        body.minimal-timer-active #timer-screen, body.minimal-timer-active .current-task-display, body.minimal-timer-active #timer-display, body.minimal-timer-active .minimal-view-button, body.minimal-timer-active #post-timer-controls { pointer-events: auto; }
+
+        /* --- Screen Management --- */
+        .screen { display: none; flex-direction: column; height: 100%; width: 100%; background-color: rgba(0, 0, 0, 0.5); position: absolute; top: 0; left: 0; transition: background-color 0.3s ease, opacity 0.3s ease; }
+        .screen.active { display: flex; opacity: 1; }
+        body.minimal-timer-active .screen { background-color: transparent; }
+        body.minimal-timer-active .screen:not(#timer-screen) { display: none !important; }
+        body.minimal-timer-active #timer-screen { position: static; }
+
+        /* --- Auth Screen Styles --- */
+        #auth-screen { justify-content: center; align-items: center; text-align: center; padding: 30px; background-color: rgba(0,0,0,0.6); }
+        .auth-content h1 { font-size: 1.4em; margin-bottom: 15px; color: #FFAA00; text-shadow: 2px 2px #3E3E3E; }
+        .auth-content p { font-size: 0.8em; line-height: 1.6; margin-bottom: 25px; color: #DDD; max-width: 90%; margin-left: auto; margin-right: auto; }
+        .auth-form { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .auth-form label { font-size: 0.8em; color: #AAA; }
+        .auth-form input { font-family: 'Press Start 2P', cursive; padding: 10px; background-color: #3a3a3a; border: 2px solid #1a1a1a; color: #FFF; width: 80%; max-width: 250px; text-align: center; outline: none; box-shadow: inset 2px 2px 0px #2a2a2a; }
+        #get-started-button { font-family: 'Press Start 2P', cursive; padding: 12px 25px; margin-top: 15px; background-color: #7D7D7D; color: #FFF; border: 3px solid #3E3E3E; box-shadow: inset -3px -3px 0px #5a5a5a, 3px 3px 0px #2a2a2a; cursor: pointer; font-size: 0.9em; transition: background-color 0.1s ease; }
+        #get-started-button:active { background-color: #6a6a6a; box-shadow: inset 3px 3px 0px #5a5a5a, 0 0 0 #2a2a2a; transform: translate(1px, 1px); }
+        .error-message { color: #FF5555; font-size: 0.7em; margin-top: 10px; text-align: center; }
+
+        /* --- Timer Screen --- */
+        #timer-screen { display: flex; flex-direction: column; }
+        .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; /* Reduced padding */ background-color: rgba(0, 0, 0, 0.4); border-bottom: 3px solid #2a2a2a; flex-shrink: 0; transition: all 0.3s ease; z-index: 20; }
+        body.minimal-timer-active .top-bar { background-color: transparent; border-bottom-color: transparent; }
+        body.minimal-timer-active .top-bar > #close-timer-btn, body.minimal-timer-active .top-bar > #complete-task-btn { opacity: 0; visibility: hidden; pointer-events: none; }
+        body.minimal-timer-active .top-bar { justify-content: center; }
+
+        .current-task-display { text-align: center; background-color: rgba(0, 0, 0, 0.6); padding: 5px 15px; border: 2px solid #1a1a1a; box-shadow: inset 2px 2px 0px #000; transition: all 0.3s ease; position: relative; z-index: 25; }
+        body.minimal-timer-active .current-task-display { position: fixed; top: 20px; /* Closer to top */ left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.7); border: 2px solid #1a1a1a; box-shadow: inset 2px 2px 0px #000, 0 3px 5px rgba(0,0,0,0.4); z-index: 30; }
+        .current-task-display span { font-size: 0.6em; color: #AAA; display: block; margin-bottom: 2px;}
+        .current-task-display p { font-size: 0.8em; color: #FFF; line-height: 1.2; }
+
+        .main-timer-content { display: flex; flex-grow: 1; overflow: hidden; position: relative; }
+        body.minimal-timer-active .main-timer-content { display: block; overflow: visible; }
+
+        .sidebar { display: flex; flex-direction: column; align-items: center; padding: 20px 10px; background-color: rgba(0, 0, 0, 0.3); border-right: 3px solid #2a2a2a; gap: 20px; /* Increased gap */ transition: all 0.3s ease; flex-shrink: 0; }
+        body.minimal-timer-active .sidebar { opacity: 0; visibility: hidden; pointer-events: none; transform: translateX(-100%); }
+        .sidebar .icon { font-size: 1.6em; /* Slightly larger icons */ color: #AAA; cursor: pointer; width: 35px; /* Slightly larger */ height: 35px; display: flex; justify-content: center; align-items: center; background-color: #3a3a3a; border: 2px solid #1a1a1a; box-shadow: inset 2px 2px 0px #2a2a2a; transition: background-color 0.2s, box-shadow 0.2s; }
+        .sidebar .icon:active { background-color: #2a2a2a; box-shadow: inset 2px 2px 0px #1a1a1a; }
+        .sidebar .icon.active-weather { background-color: #5a5a5a; box-shadow: inset 2px 2px 0px #7d7d7d; color: white; } /* Make active icon white */
+        .sidebar .icon.rain { } /* No specific color needed */
+        .sidebar .icon.snow { } /* No specific color needed */
+
+        .timer-display-area { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 0 15px; position: relative; }
+        body.minimal-timer-active .timer-display-area { position: fixed; top: 0; left: 0; width: 100%; height: 100%; padding: 0; z-index: 20; pointer-events: none; }
+        body.minimal-timer-active .timer-display-area > * { pointer-events: auto; }
+
+        .focus-label { font-size: 0.8em; color: #AAA; margin-bottom: 5px; transition: opacity 0.3s ease; }
+        body.minimal-timer-active .focus-label { display: none; }
+
+        #timer-display {
+            font-size: 6em; /* Adjusted size */
+            color: #FFF;
+            text-shadow: 3px 3px #505050, -3px -3px #505050, 3px -3px #505050, -3px 3px #505050, 4px 4px #000; /* Sharper outline */
+            margin-bottom: 10px; /* Reduced margin */
+            line-height: 1; /* Ensure tight line height */
+            transition: all 0.3s ease;
+            position: relative; z-index: 25; text-align: center; width: 100%;
+            letter-spacing: -2px; /* Bring digits slightly closer */
+        }
+        body.minimal-timer-active #timer-display { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); margin-bottom: 0; }
+
+        .progress-bar-container { width: 60%; /* Made narrower like image */ max-width: 250px; height: 10px; /* Made thinner */ background-color: #3a3a3a; border: 2px solid #1a1a1a; box-shadow: inset 1px 1px 0px #2a2a2a; overflow: hidden; transition: all 0.3s ease; margin-top: 5px; /* Space between timer and bar */ }
+        body.minimal-timer-active .progress-bar-container { display: none; }
+        #progress-bar { width: 0%; height: 100%; background-color: #FFAA00; transition: width 0.5s linear; }
+
+        .bottom-bar { display: flex; justify-content: space-around; align-items: center; padding: 15px; background-color: rgba(0, 0, 0, 0.4); border-top: 3px solid #2a2a2a; flex-shrink: 0; transition: all 0.3s ease; z-index: 20; }
+        body.minimal-timer-active .bottom-bar { opacity: 0; visibility: hidden; pointer-events: none; transform: translateY(100%); }
+
+        .icon-button { font-family: 'Press Start 2P', cursive; background-color: #7D7D7D; color: #FFF; border: 3px solid #3E3E3E; box-shadow: inset -3px -3px 0px #5a5a5a, 3px 3px 0px #2a2a2a; width: 55px; /* Adjusted size */ height: 50px; font-size: 1.8em; /* Larger icon */ cursor: pointer; display: flex; justify-content: center; align-items: center; transition: background-color 0.1s ease; padding-top: 4px; /* Adjust icon position */ }
+        .icon-button:active { background-color: #6a6a6a; box-shadow: inset 3px 3px 0px #5a5a5a, 0 0 0 #2a2a2a; transform: translate(1px, 1px); }
+        .icon-button.large { width: auto; min-width: 90px; /* Wider for "Start" */ height: 50px; font-size: 1.1em; /* Text size */ padding: 0 15px; }
+        .top-bar .icon-button { width: 35px; height: 35px; font-size: 1.2em; border-width: 2px; box-shadow: inset -2px -2px 0px #5a5a5a, 2px 2px 0px #2a2a2a; padding-top: 0; }
+        .top-bar .icon-button:active { box-shadow: inset 2px 2px 0px #5a5a5a, 0 0 0 #2a2a2a; }
+
+        /* Minimal View Buttons Container */
+        #minimal-controls-container {
+             position: fixed;
+             bottom: 30px;
+             left: 50%;
+             transform: translateX(-50%);
+             z-index: 100;
+             display: flex;
+             gap: 15px; /* Space between buttons */
+        }
+
+        .minimal-view-button { /* Common style for Pause/Reset */
+            display: none; /* Hidden by default */
+            font-family: 'Press Start 2P', cursive;
+            background-color: rgba(125, 125, 125, 0.7);
+            color: #FFF;
+            border: 3px solid #3E3E3E;
+            box-shadow: inset -3px -3px 0px rgba(90, 90, 90, 0.7), 3px 3px 0px #2a2a2a;
+            padding: 10px 15px; /* Adjusted padding */
+            font-size: 1em;
+            cursor: pointer;
+            transition: background-color 0.1s ease;
+            min-width: 80px; /* Ensure minimum width */
+            text-align: center;
+        }
+        .minimal-view-button:active { background-color: rgba(106, 106, 106, 0.7); box-shadow: inset 3px 3px 0px rgba(90, 90, 90, 0.7), 0 0 0 #2a2a2a; transform: translateY(1px); }
+        body.minimal-timer-active .minimal-view-button { display: block; } /* Show in minimal view */
+
+        .playing-status { text-align: center; font-size: 0.7em; color: #AAA; padding-bottom: 10px; background-color: rgba(0, 0, 0, 0.4); flex-shrink: 0; transition: all 0.3s ease; }
+        body.minimal-timer-active .playing-status { opacity: 0; visibility: hidden; transform: translateY(100%); }
+
+        /* Post-Timer Controls */
+        #post-timer-controls { display: none; position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%); z-index: 110; background-color: rgba(0, 0, 0, 0.7); padding: 15px; border: 3px solid #5a5a5a; box-shadow: inset 0 0 0 3px #2a2a2a, 0 5px 10px rgba(0,0,0,0.5); text-align: center; }
+        #post-timer-controls p { font-size: 0.9em; margin-bottom: 15px; }
+        #post-timer-controls button { font-family: 'Press Start 2P', cursive; padding: 10px 15px; margin: 0 5px; background-color: #7D7D7D; color: #FFF; border: 3px solid #3E3E3E; box-shadow: inset -3px -3px 0px #5a5a5a, 3px 3px 0px #2a2a2a; cursor: pointer; font-size: 0.8em; }
+        #post-timer-controls button:active { background-color: #6a6a6a; box-shadow: inset 3px 3px 0px #5a5a5a, 0 0 0 #2a2a2a; transform: translate(1px, 1px); }
+
+        /* Modals (Ensure high z-index) */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.8); /* Darker overlay */ justify-content: center; align-items: center; padding: 20px; z-index: 200; }
+        /* Rest of modal styles unchanged */
+        .modal.active { display: flex; } .modal-content { background-color: #C6C6C6; color: #3E3E3E; padding: 20px; border: 4px solid #5a5a5a; box-shadow: 0 0 0 4px #2a2a2a, 5px 5px 10px rgba(0,0,0,0.5); position: relative; width: 90%; max-width: 380px; max-height: 80%; overflow-y: auto; } .close-modal-btn { position: absolute; top: 5px; right: 5px; background-color: #FF5555; color: white; border: 2px solid #3E3E3E; box-shadow: inset -2px -2px 0px #AA0000, 2px 2px 0px #2a2a2a; width: 25px; height: 25px; font-size: 0.8em; cursor: pointer; font-family: 'Press Start 2P', cursive; display: flex; justify-content: center; align-items: center; } .close-modal-btn:active { background-color: #CC4444; box-shadow: inset 2px 2px 0px #AA0000, 0 0 0 #2a2a2a; transform: translate(1px, 1px); } .book-ui { background-color: #F3EAC8; border-color: #8B4513; box-shadow: 0 0 0 4px #542d0d, 5px 5px 10px rgba(0,0,0,0.5); color: #3a2a1a; } .book-ui h2 { text-align: center; margin-bottom: 15px; font-size: 1.2em; color: #542d0d; } .task-input-area { display: flex; margin-bottom: 15px; gap: 5px; } .task-input-area input[type="text"] { flex-grow: 1; font-family: 'Press Start 2P', cursive; padding: 8px; background-color: #E0D6B3; border: 2px solid #8B4513; box-shadow: inset 1px 1px 0px #6F3910; color: #3a2a1a; font-size: 0.8em; } .task-input-area button, #save-tasks-btn { font-family: 'Press Start 2P', cursive; padding: 8px 10px; background-color: #A0A0A0; color: #FFF; border: 2px solid #3E3E3E; box-shadow: inset -2px -2px 0px #7D7D7D, 2px 2px 0px #2a2a2a; cursor: pointer; font-size: 0.8em; } .task-input-area button:active, #save-tasks-btn:active { transform: translate(1px, 1px); box-shadow: inset 2px 2px 0px #7D7D7D, 0 0 0 #2a2a2a; } #task-list { list-style: none; margin-bottom: 20px; } #task-list li { display: flex; align-items: center; justify-content: space-between; padding: 8px 5px; border-bottom: 1px dashed #8B4513; font-size: 0.8em; } #task-list li:last-child { border-bottom: none; } #task-list input[type="checkbox"] { margin-right: 10px; appearance: none; width: 16px; height: 16px; background-color: #E0D6B3; border: 2px solid #8B4513; box-shadow: inset 1px 1px 0px #6F3910; cursor: pointer; position: relative; top: 2px; } #task-list input[type="checkbox"]:checked { background-color: #7D7D7D; box-shadow: inset 2px 2px 0px #5a5a5a; } #task-list input[type="checkbox"]:checked::after { content: '\2714'; color: #FFF; font-size: 12px; position: absolute; top: -1px; left: 1px; } #task-list .task-text { flex-grow: 1; word-break: break-all; } #task-list .task-text.completed { text-decoration: line-through; color: #7a6a5a; } #task-list .remove-task-btn { background: none; border: none; color: #8B4513; cursor: pointer; font-size: 1.1em; margin-left: 10px; padding: 0 5px; } #task-list .remove-task-btn:hover { color: #FF5555; } #save-tasks-btn { display: block; margin: 0 auto; } .advancement-ui { background-color: #2a2a2a; border-color: #7D7D7D; box-shadow: 0 0 0 4px #5a5a5a, 5px 5px 10px rgba(0,0,0,0.5); color: #FFF; } .advancement-top-bar { background-color: rgba(0, 0, 0, 0.5); padding: 5px 10px; margin: -20px -20px 15px -20px; border-bottom: 3px solid #5a5a5a; display: flex; justify-content: space-between; align-items: center; font-size: 0.8em; } .advancement-top-bar span:first-child { color: #FFFF55; } .advancement-top-bar #advancement-title { font-weight: bold; } .advancement-top-bar .close-modal-btn { position: static; width: 20px; height: 20px; font-size: 0.7em; } .advancement-book { background-color: #F3EAC8; color: #3a2a1a; padding: 15px; border: 3px solid #8B4513; box-shadow: inset 0 0 0 2px #6F3910; font-size: 0.8em; line-height: 1.7; } .advancement-book p { margin-bottom: 10px; } .advancement-book p:first-child { font-size: 0.7em; color: #7a6a5a; text-align: right; } #share-result-btn { font-family: 'Press Start 2P', cursive; display: block; margin: 15px auto 0 auto; padding: 10px 15px; background-color: #7D7D7D; color: #FFF; border: 3px solid #3E3E3E; box-shadow: inset -3px -3px 0px #5a5a5a, 3px 3px 0px #2a2a2a; cursor: pointer; font-size: 0.8em; } #share-result-btn:active { transform: translate(1px, 1px); box-shadow: inset 3px 3px 0px #5a5a5a, 0 0 0 #2a2a2a; }
+
+    </style>
+</head>
+<body>
+    <!-- Elements outside App Container -->
+    <div id="weather-overlay"></div>
+    <button id="prev-wallpaper-btn" class="wallpaper-nav-btn"><</button>
+    <button id="next-wallpaper-btn" class="wallpaper-nav-btn">></button>
+    <div id="post-timer-controls">
+         <p id="post-timer-message">Time's up!</p>
+         <div id="post-timer-buttons"></div>
+     </div>
+     <!-- Container for minimal view buttons -->
+    <div id="minimal-controls-container">
+        <button id="minimal-pause-resume-btn" class="minimal-view-button">⏸</button> <!-- Pause/Resume -->
+        <button id="minimal-reset-btn" class="minimal-view-button">Reset</button> <!-- Restart -->
+    </div>
+
+
+    <!-- Main App Container -->
+    <div id="app-container">
+        <!-- Auth Screen -->
+        <div id="auth-screen" class="screen active">
+             <div class="auth-content">
+                 <h1>Work with Minecraft ambience</h1>
+                 <p>On-slot your workflow with the soothing sounds of Minecraft, ambience sounds will boost your workflow and concentration and creativity.</p>
+                 <div class="auth-form">
+                     <label for="username">Username:</label>
+                     <input type="text" id="username" name="username" required>
+                     <label for="password">Password:</label>
+                     <input type="password" id="password" name="password">
+                     <button id="get-started-button">Get Started</button>
+                 </div>
+                  <p id="auth-error" class="error-message"></p>
+             </div>
+        </div>
+
+        <!-- Timer Screen -->
+        <div id="timer-screen" class="screen">
+            <div class="top-bar">
+                 <button class="icon-button" id="close-timer-btn">X</button>
+                 <div class="current-task-display">
+                     <span>Current Task</span>
+                     <p id="current-task-name">Select Task</p>
+                 </div>
+                 <button class="icon-button" id="complete-task-btn">✔</button>
+             </div>
+            <div class="main-timer-content">
+                 <div class="sidebar">
+                     <div class="icon rain" id="toggle-rain-btn">💧</div> <!-- Rain Emoji -->
+                     <div class="icon snow" id="toggle-snow-btn">❄️</div> <!-- Snow Emoji -->
+                     <!-- Removed Sword, Pickaxe, Arrows -->
+                 </div>
+                 <div class="timer-display-area">
+                     <div class="focus-label">Focus Time</div>
+                     <div id="timer-display">25:00</div>
+                     <div class="progress-bar-container">
+                         <div id="progress-bar"></div>
+                     </div>
+                 </div>
+             </div>
+             <div class="bottom-bar">
+                 <button class="icon-button" id="music-btn">♫</button>
+                 <button class="icon-button large" id="play-pause-btn">Start</button>
+                 <button class="icon-button" id="todo-btn">📖</button> <!-- Book Emoji -->
+             </div>
+             <div class="playing-status">Playing C418 -</div>
+        </div>
+
+        <!-- Modals (content unchanged) -->
+        <div id="todo-modal" class="modal"> <div class="modal-content book-ui"><button class="close-modal-btn" id="close-todo-btn">X</button><h2>To-Do List</h2><div class="task-input-area"><input type="text" id="new-task-input" placeholder="Enter new task..."><button id="add-task-btn">Add</button></div><ul id="task-list"></ul><button id="save-tasks-btn">Save Tasks</button></div> </div>
+        <div id="advancement-modal" class="modal"> <div class="modal-content advancement-ui"><div class="advancement-top-bar"><span> Advancement Made!</span><span id="advancement-title">Task Complete!</span><button class="close-modal-btn" id="close-advancement-btn">✔</button></div><div class="advancement-book"><p>Page 1/1</p><p id="advancement-date">On [Date]</p><p id="advancement-details">This person spent [Time] on [Task Name].</p><p>This person has successfully build their own cozy home.</p><p>Maybe they can try building a better one next time?</p><button id="share-result-btn">Share Your Result</button></div></div> </div>
+
+    </div><!-- End #app-container -->
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log("DOM Loaded, starting script...");
+
+            // --- DOM Elements ---
+            // (Get all elements as before, adding minimal-reset-btn)
+            const body = document.body; const appContainer = document.getElementById('app-container'); const authScreen = document.getElementById('auth-screen'); const timerScreen = document.getElementById('timer-screen'); const todoModal = document.getElementById('todo-modal'); const advancementModal = document.getElementById('advancement-modal'); const weatherOverlay = document.getElementById('weather-overlay'); const postTimerControls = document.getElementById('post-timer-controls'); const postTimerMessage = document.getElementById('post-timer-message'); const postTimerButtonsDiv = document.getElementById('post-timer-buttons'); const minimalPauseResumeBtn = document.getElementById('minimal-pause-resume-btn'); const minimalResetBtn = document.getElementById('minimal-reset-btn'); /* New */ const prevWallpaperBtn = document.getElementById('prev-wallpaper-btn'); const nextWallpaperBtn = document.getElementById('next-wallpaper-btn'); const toggleRainBtn = document.getElementById('toggle-rain-btn'); const toggleSnowBtn = document.getElementById('toggle-snow-btn'); const usernameInput = document.getElementById('username'); const passwordInput = document.getElementById('password'); const getStartedButton = document.getElementById('get-started-button'); const authError = document.getElementById('auth-error'); const timerDisplay = document.getElementById('timer-display'); const progressBar = document.getElementById('progress-bar'); const currentTaskNameDisplay = document.getElementById('current-task-name'); const playPauseButton = document.getElementById('play-pause-btn'); const closeTimerBtn = document.getElementById('close-timer-btn'); const completeTaskBtn = document.getElementById('complete-task-btn'); const musicButton = document.getElementById('music-btn'); const todoButton = document.getElementById('todo-btn'); const closeTodoBtn = document.getElementById('close-todo-btn'); const newTaskInput = document.getElementById('new-task-input'); const addTaskBtn = document.getElementById('add-task-btn'); const taskListUl = document.getElementById('task-list'); const saveTasksBtn = document.getElementById('save-tasks-btn'); const closeAdvancementBtn = document.getElementById('close-advancement-btn'); const shareResultBtn = document.getElementById('share-result-btn'); const advancementTitle = document.getElementById('advancement-title'); const advancementDate = document.getElementById('advancement-date'); const advancementDetails = document.getElementById('advancement-details');
+
+            // --- State Variables ---
+            // (Unchanged)
+            let timerInterval = null; let focusDuration = 25 * 60; let breakDuration = 5 * 60; let totalSeconds = focusDuration; let currentSeconds = totalSeconds; let isRunning = false; let isFocusMode = true; let tasks = []; let currentTask = null; let sessionStartTime = null; let currentWallpaperIndex = 0; let isSnowing = false; let isRaining = false; let snowInterval = null; let rainInterval = null;
+
+            // --- Background Images ---
+            const backgroundImages = [ /* Your image URLs */
+                'https://wallpapers.com/images/hd/minecraft-aesthetic-brown-lighthouse-2l1zxh0vgrze8gs5.jpg','https://wallpapercave.com/wp/wp5961492.png','https://preview.redd.it/here-are-some-wallpapaer-i-made-fell-free-to-share-ideas-of-v0-7buzb5xztqhb1.png?width=640&crop=smart&auto=webp&s=58a2f1d72fb5cd016d68e74bcb6b2c35b95bb000','https://wallpapercave.com/wp/wp4073802.jpg','https://e0.pxfuel.com/wallpapers/316/436/desktop-wallpaper-minecraft-shaders-minecraft-rtx.jpg','https://wallpapercave.com/wp/wp5961395.jpg','https://wallpapers-clan.com/wp-content/uploads/2024/02/aesthetic-minecraft-landscape-desktop-wallpaper-cover.jpg','https://wallpaper.forfun.com/fetch/c9/c9ee09560049e64aff68992d11a423ca.jpeg','https://mrwallpaper.com/images/featured/minecraft-2wakhsn819z66uwn.jpg','https://i.pinimg.com/736x/df/46/d5/df46d599e11b0c886a1f41697e53dbe4.jpg','https://cdn.pixabay.com/photo/2017/02/10/00/03/minecraft-2053882_1280.jpg','https://i.redd.it/p88dciey8in91.jpg','https://wallpapers-clan.com/wp-content/uploads/2024/02/aesthetic-minecraft-landscape-desktop-wallpaper-preview.jpg'];
+
+            // --- Wallpaper Functions ---
+            function setBackground(index) { /* Unchanged */ currentWallpaperIndex = (index + backgroundImages.length) % backgroundImages.length; const imageUrl = backgroundImages[currentWallpaperIndex]; body.style.backgroundImage = `url('${imageUrl}')`; }
+            if (prevWallpaperBtn) prevWallpaperBtn.addEventListener('click', () => setBackground(currentWallpaperIndex - 1));
+            if (nextWallpaperBtn) nextWallpaperBtn.addEventListener('click', () => setBackground(currentWallpaperIndex + 1));
+
+            // --- Weather Functions ---
+            // (Unchanged - createParticle, start/stop Snowing/Raining, listeners)
+            function createParticle(type) { const particle = document.createElement('div'); particle.classList.add(type); particle.style.left = `${Math.random() * 100}%`; const duration = Math.random() * 5 + 5; const delay = Math.random() * 2; particle.style.animationDuration = `${duration}s`; particle.style.animationDelay = `${delay}s`; if (type === 'snowflake') { const drift = (Math.random() - 0.5) * 100; particle.animate([ { transform: 'translateY(0)', opacity: 1 }, { transform: `translateY(105vh) translateX(${drift}px)`, opacity: 0 } ], { duration: duration * 1000, delay: delay * 1000, easing: 'linear' }); } weatherOverlay.appendChild(particle); setTimeout(() => { if (particle.parentNode === weatherOverlay) { weatherOverlay.removeChild(particle); } }, (duration + delay + 0.5) * 1000); }
+             function startSnowing() { if (isSnowing) return; stopRaining(); isSnowing = true; if(toggleSnowBtn) toggleSnowBtn.classList.add('active-weather'); snowInterval = setInterval(() => createParticle('snowflake'), 300); }
+             function stopSnowing() { if (!isSnowing) return; isSnowing = false; if(toggleSnowBtn) toggleSnowBtn.classList.remove('active-weather'); clearInterval(snowInterval); snowInterval = null; }
+             function startRaining() { if (isRaining) return; stopSnowing(); isRaining = true; if(toggleRainBtn) toggleRainBtn.classList.add('active-weather'); rainInterval = setInterval(() => createParticle('raindrop'), 100); }
+             function stopRaining() { if (!isRaining) return; isRaining = false; if(toggleRainBtn) toggleRainBtn.classList.remove('active-weather'); clearInterval(rainInterval); rainInterval = null; }
+             if(toggleSnowBtn) toggleSnowBtn.addEventListener('click', () => { if (isSnowing) stopSnowing(); else startSnowing(); });
+             if(toggleRainBtn) toggleRainBtn.addEventListener('click', () => { if (isRaining) stopRaining(); else startRaining(); });
+
+
+            // --- Initialization ---
+            function init() { /* Unchanged */ console.log("Initializing app..."); setBackground(Math.floor(Math.random() * backgroundImages.length)); checkLoginStatus(); loadTasks(); updateTimerDisplay(); updateCurrentTaskDisplay(); updateButtonStates(); console.log("Initialization complete."); }
+
+            // --- UI State Management ---
+            function setMinimalView(active) { /* Unchanged */ hidePostTimerControls(); if (active) { body.classList.add('minimal-timer-active'); } else { body.classList.remove('minimal-timer-active'); } updateButtonStates(); }
+            function updateButtonStates() { /* Updated for reset button */ if (body.classList.contains('minimal-timer-active')) { if (minimalPauseResumeBtn) minimalPauseResumeBtn.innerHTML = isRunning ? '⏸' : 'Resume'; if (playPauseButton) playPauseButton.innerHTML = 'Start'; } else { if (playPauseButton) playPauseButton.innerHTML = isRunning ? '⏸' : 'Start'; } }
+
+            // --- Authentication ---
+            // (Unchanged, includes null checks)
+            function checkLoginStatus() { console.log("Checking login status..."); const loggedInUser = localStorage.getItem('minecraftPomodoroUser'); if (loggedInUser) { showScreen(timerScreen); if(usernameInput) usernameInput.value = loggedInUser; } else { showScreen(authScreen); } if(authError) authError.textContent = ''; }
+             if (getStartedButton) { getStartedButton.addEventListener('click', () => { console.log("Get Started clicked!"); const username = usernameInput ? usernameInput.value.trim() : ''; if (username) { localStorage.setItem('minecraftPomodoroUser', username); showScreen(timerScreen); if(authError) authError.textContent = ''; } else { if(authError) authError.textContent = 'Please enter a username.'; } }); } else { console.error("Get Started button not found!"); }
+             if(closeTimerBtn) closeTimerBtn.addEventListener('click', () => { if (confirm('Log out? Timer will reset.')) { localStorage.removeItem('minecraftPomodoroUser'); resetTimer(true); currentTask = null; updateCurrentTaskDisplay(); checkLoginStatus(); setMinimalView(false); } }); else console.error("closeTimerBtn not found");
+
+
+            // --- Screen Management ---
+            function showScreen(screenElement) { /* Unchanged */ if(!screenElement) { console.error("showScreen called with null element"); return; } console.log("Showing screen:", screenElement.id); document.querySelectorAll('.screen').forEach(screen => screen.classList.remove('active')); screenElement.classList.add('active'); }
+
+            // --- Timer Logic ---
+            function updateTimerDisplay() { /* Unchanged */ const minutes = Math.floor(currentSeconds / 60); const seconds = currentSeconds % 60; if(timerDisplay) timerDisplay.textContent = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`; const progressPercent = ((totalSeconds - currentSeconds) / totalSeconds) * 100; if(progressBar) progressBar.style.width = `${progressPercent}%`; }
+            function startTimer() { /* Unchanged */ if (isRunning) return; if (currentTask === null && isFocusMode) { const firstIncomplete = tasks.find(task => !task.completed); if(firstIncomplete) { selectTask(firstIncomplete.id); if (currentTask === null) return; } else { alert("All tasks completed!"); return; } } else if (currentTask === null && isFocusMode) { alert("Please select a task!"); return; } setMinimalView(true); isRunning = true; if (sessionStartTime === null) { sessionStartTime = new Date(); } updateButtonStates(); timerInterval = setInterval(() => { currentSeconds--; updateTimerDisplay(); if (currentSeconds <= 0) { handleTimerEnd(); } }, 1000); }
+            function pauseTimer() { /* Unchanged */ if (!isRunning) return; clearInterval(timerInterval); isRunning = false; updateButtonStates(); }
+            if (minimalPauseResumeBtn) minimalPauseResumeBtn.addEventListener('click', () => { if (isRunning) pauseTimer(); else startTimer(); });
+            // <<< Add Reset Button Listener >>>
+            if (minimalResetBtn) {
+                minimalResetBtn.addEventListener('click', () => {
+                    if (confirm(`Reset current ${isFocusMode ? 'focus' : 'break'} timer?`)) {
+                        resetTimer(!isFocusMode, false); // Reset to the *opposite* of the current mode, exit minimal view
+                        // Or reset to current mode? Let's reset current mode and exit minimal view.
+                         resetTimer(isFocusMode, false); // Reset current mode (true=focus, false=break), exit minimal view
+                    }
+                });
+            }
+            function resetTimer(forceFocus = true, keepMinimalView = false) { // Default to forcing focus unless break reset
+                clearInterval(timerInterval);
+                isRunning = false;
+                sessionStartTime = null; // Reset session start
+
+                isFocusMode = forceFocus; // Set mode based on argument
+                totalSeconds = isFocusMode ? focusDuration : breakDuration;
+                currentSeconds = totalSeconds;
+
+                if (!keepMinimalView) {
+                     setMinimalView(false);
+                } else {
+                     updateButtonStates();
+                }
+
+                updateTimerDisplay();
+                updateCurrentTaskDisplay();
+            }
+            function handleTimerEnd() { /* Unchanged */ clearInterval(timerInterval); isRunning = false; const completedMode = isFocusMode ? "Focus" : "Break"; showPostTimerControls(completedMode); }
+            if(playPauseButton) playPauseButton.addEventListener('click', () => { if (!isRunning) startTimer(); });
+
+
+            // --- Post-Timer Controls Logic ---
+            // (Unchanged - showPostTimerControls, hidePostTimerControls)
+             function showPostTimerControls(completedMode) { if(!postTimerControls || !postTimerButtonsDiv || !postTimerMessage) return; postTimerControls.style.display = 'block'; postTimerButtonsDiv.innerHTML = ''; if (completedMode === "Focus") { postTimerMessage.textContent = "Focus Complete!"; const startBreakBtn = document.createElement('button'); startBreakBtn.textContent = "Start Break"; startBreakBtn.onclick = () => { hidePostTimerControls(); isFocusMode = false; resetTimer(false, true); startTimer(); }; const skipBreakBtn = document.createElement('button'); skipBreakBtn.textContent = "Skip Break"; skipBreakBtn.onclick = () => { hidePostTimerControls(); isFocusMode = true; resetTimer(true, false); }; postTimerButtonsDiv.appendChild(startBreakBtn); postTimerButtonsDiv.appendChild(skipBreakBtn); } else { postTimerMessage.textContent = "Break Over!"; const startFocusBtn = document.createElement('button'); startFocusBtn.textContent = "Start Focus"; startFocusBtn.onclick = () => { hidePostTimerControls(); isFocusMode = true; resetTimer(true, false); }; postTimerButtonsDiv.appendChild(startFocusBtn); } }
+             function hidePostTimerControls() { if(postTimerControls) postTimerControls.style.display = 'none'; }
+
+
+            // --- Task Management ---
+            // (renderTasks, updateCurrentTaskDisplay, addTask, removeTask, saveTasks, loadTasks - unchanged logic)
+            function renderTasks() { if(!taskListUl) return; taskListUl.innerHTML = ''; if (tasks.length === 0) { const li = document.createElement('li'); li.textContent = "No tasks yet. Add one!"; li.style.color = '#7a6a5a'; li.style.textAlign = 'center'; taskListUl.appendChild(li); return; } tasks.forEach(task => { const li = document.createElement('li'); li.dataset.id = task.id; const checkbox = document.createElement('input'); checkbox.type = 'checkbox'; checkbox.checked = task.completed; checkbox.addEventListener('change', (event) => toggleTask(task.id, event.target.checked)); /* Pass checked state */ const span = document.createElement('span'); span.textContent = task.text; span.classList.add('task-text'); if (task.completed) { span.classList.add('completed'); } span.addEventListener('click', () => selectTask(task.id)); if (currentTask && currentTask.id === task.id) { li.style.backgroundColor = '#e0d6b3'; } const removeBtn = document.createElement('button'); removeBtn.innerHTML = '×'; removeBtn.classList.add('remove-task-btn'); removeBtn.addEventListener('click', () => removeTask(task.id)); li.appendChild(checkbox); li.appendChild(span); li.appendChild(removeBtn); taskListUl.appendChild(li); }); updateCurrentTaskDisplay(); }
+             function selectTask(id) { /* Unchanged */ const taskIndex = tasks.findIndex(task => task.id === id); if (taskIndex > -1 && !tasks[taskIndex].completed) { currentTask = tasks[taskIndex]; isFocusMode = true; resetTimer(true, false); updateCurrentTaskDisplay(); renderTasks(); closeModal(todoModal); } else if (taskIndex > -1 && tasks[taskIndex].completed) { alert("This task is already completed!"); } }
+             function updateCurrentTaskDisplay() { /* Unchanged */ if(!currentTaskNameDisplay) return; if (currentTask && !currentTask.completed && isFocusMode) { currentTaskNameDisplay.textContent = currentTask.text; } else if (isFocusMode) { currentTaskNameDisplay.textContent = "Select Task"; } else { currentTaskNameDisplay.textContent = "--- Break ---"; } }
+             function addTask() { /* Unchanged */ if(!newTaskInput || !taskListUl) return; const text = newTaskInput.value.trim(); if (text) { const newTask = { id: Date.now(), text: text, completed: false }; tasks.push(newTask); newTaskInput.value = ''; renderTasks(); if (tasks.length === 1 && currentTask === null) { selectTask(newTask.id); } } }
+             function removeTask(id) { /* Unchanged */ tasks = tasks.filter(task => task.id !== id); if (currentTask && currentTask.id === id) { currentTask = null; resetTimer(true, false); updateCurrentTaskDisplay(); } renderTasks(); saveTasks(); }
+             function saveTasks() { /* Unchanged */ localStorage.setItem('minecraftPomodoroTasks', JSON.stringify(tasks)); if(!saveTasksBtn) return; const originalText = saveTasksBtn.textContent; saveTasksBtn.textContent = 'Saved!'; saveTasksBtn.style.backgroundColor = '#55AA55'; setTimeout(() => { saveTasksBtn.textContent = originalText; saveTasksBtn.style.backgroundColor = '#A0A0A0'; }, 1000); }
+             function loadTasks() { /* Unchanged */ const storedTasks = localStorage.getItem('minecraftPomodoroTasks'); if (storedTasks) { try { tasks = JSON.parse(storedTasks) || []; } catch (e) { console.error("Error parsing tasks from localStorage", e); tasks = []; } } else { tasks = []; } if (!currentTask) { currentTask = tasks.find(task => !task.completed) || null; } renderTasks(); }
+             // <<< Updated toggleTask for Advancement Check >>>
+            function toggleTask(id, isChecked) {
+                const taskIndex = tasks.findIndex(task => task.id === id);
+                if (taskIndex > -1) {
+                    // Only trigger advancement if CHECKING the box for the CURRENT ACTIVE task while timer was running
+                    if (isChecked && currentTask && currentTask.id === id && (isRunning || sessionStartTime)) {
+                        console.log("Checkbox completion triggered for active task");
+                        tasks[taskIndex].completed = true; // Mark complete first
+                        pauseTimer(); // Stop the timer
+                        showAdvancement(currentTask); // Show advancement (will also save/reset)
+                        // No need to call render/save here, showAdvancement handles it
+                    } else {
+                        // Otherwise, just update the completed state visually and save
+                        tasks[taskIndex].completed = isChecked;
+                        // If unchecking the current task, maybe reset timer? Optional, let's not for now.
+                        // if (!isChecked && currentTask && currentTask.id === id) { resetTimer(true, false); }
+                         if (!isChecked && currentTask && currentTask.id === id) {
+                            // If unchecking the *current* task, clear current task selection
+                            // so user has to re-select to start timer again.
+                             currentTask = null;
+                             resetTimer(true, false); // Also reset timer & exit minimal view
+                        }
+                        renderTasks();
+                        saveTasks();
+                    }
+                }
+            }
+             // Task event listeners (unchanged)
+             if(addTaskBtn) addTaskBtn.addEventListener('click', addTask);
+             if(newTaskInput) newTaskInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') addTask(); });
+             if(saveTasksBtn) saveTasksBtn.addEventListener('click', saveTasks);
+
+
+            // --- Modals ---
+            // (Unchanged - openModal, closeModal, listeners)
+            function openModal(modalElement) { if(!modalElement) { console.error("openModal called with null element"); return; } modalElement.style.display = 'flex'; modalElement.classList.add('active'); if (isRunning) pauseTimer(); }
+             function closeModal(modalElement) { if(!modalElement) { console.error("closeModal called with null element"); return; } modalElement.style.display = 'none'; modalElement.classList.remove('active'); }
+             if(todoButton) todoButton.addEventListener('click', () => openModal(todoModal));
+             if(closeTodoBtn) closeTodoBtn.addEventListener('click', () => closeModal(todoModal));
+             if(musicButton) musicButton.addEventListener('click', () => alert('Music selection - Coming Soon!'));
+
+
+            // --- Advancement Modal Logic ---
+            // <<< Refined showAdvancement logic >>>
+             function showAdvancement(task) {
+                 console.log("showAdvancement called for task:", task?.text, "with sessionStartTime:", sessionStartTime);
+                 // CRITICAL Check: Only show modal if sessionStartTime is valid
+                 if (!task || !sessionStartTime) {
+                     console.warn("Advancement blocked: Invalid task or no active session.");
+                     // Ensure task is marked complete if somehow called without session
+                     const taskIndex = tasks.findIndex(t => t.id === task?.id);
+                     if (taskIndex > -1 && !tasks[taskIndex].completed) {
+                         tasks[taskIndex].completed = true;
+                         renderTasks(); // Update list
+                         saveTasks(); // Save change
+                     }
+                      // If it was the current task, clear it and reset timer view
+                     if (currentTask && currentTask.id === task?.id) {
+                          currentTask = null;
+                          resetTimer(true, false); // Reset to focus, exit minimal
+                     }
+                     return; // Exit without showing modal
+                 }
+
+                 const endTime = new Date();
+                 const timeSpentMs = endTime - sessionStartTime;
+                 const minutesSpent = Math.max(1, Math.round(timeSpentMs / (1000 * 60)));
+
+                 if(advancementTitle) advancementTitle.textContent = `Task Complete!`;
+                 if(advancementDate) advancementDate.textContent = `On ${endTime.toLocaleDateString()} ${endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
+                 if(advancementDetails) advancementDetails.textContent = `This person spent ${minutesSpent} minute(s) on "${task.text}".`;
+
+                 openModal(advancementModal); // Show the modal
+
+                 // Task completion and state reset AFTER showing modal info
+                 const taskIndex = tasks.findIndex(t => t.id === task.id);
+                 if (taskIndex > -1) { tasks[taskIndex].completed = true; }
+
+                 currentTask = null;
+                 sessionStartTime = null; // Clear session AFTER using it
+                 resetTimer(true, false); // Reset to focus mode, exit minimal view
+                 renderTasks(); // Update task list display
+                 updateCurrentTaskDisplay(); // Update top bar display
+                 saveTasks(); // Save the completed state
+            }
+             // <<< Refined completeTaskBtn logic >>>
+             if(completeTaskBtn) completeTaskBtn.addEventListener('click', () => {
+                 console.log("Complete Task (✓) clicked.");
+                 if (currentTask && !currentTask.completed) {
+                     // Allow completion if timer is running OR if session has started (even if paused)
+                     if (isRunning || sessionStartTime) {
+                         pauseTimer(); // Ensure timer is stopped first
+                         showAdvancement(currentTask); // Proceed to show modal/reset
+                     } else {
+                         alert("Start the timer for the task before marking complete!");
+                     }
+                 } else if (currentTask && currentTask.completed) {
+                      alert("This task is already completed!");
+                 } else {
+                     alert("Select a task and start the timer first!");
+                 }
+             }); else console.error("completeTaskBtn not found");
+             // Advancement modal listeners (unchanged)
+             if(closeAdvancementBtn) closeAdvancementBtn.addEventListener('click', () => closeModal(advancementModal));
+             if(shareResultBtn) shareResultBtn.addEventListener('click', () => { alert('Sharing not implemented!'); closeModal(advancementModal); });
+             [todoModal, advancementModal].forEach(modal => { if(modal) modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(modal); }); });
+
+
+            // --- Start the App ---
+            init();
+
+        }); // <<< END DOMContentLoaded listener
+    </script>
+</body>
+</html>
